@@ -1,10 +1,11 @@
 import React from 'react'
-import { Wine, LayoutDashboard, ReceiptText, Package, Users, Settings, LogOut, Menu } from 'lucide-react'
+import { Wine, ReceiptText, Package, BarChart3 } from 'lucide-react'
 
 export default function Sidebar({ activeTab, setActiveTab, mobileOpen, setMobileOpen }) {
   const links = [
     { id: 'transactions', label: 'Transactions', icon: ReceiptText },
-    { id: 'inventory', label: 'Inventory', icon: Package }
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'reports', label: 'Reports', icon: BarChart3 }
   ]
   return <>
     {mobileOpen && <button aria-label="Close menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMobileOpen(false)} />}
@@ -19,14 +20,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, setMobile
           <Icon size={18} strokeWidth={1.8} />{label}{activeTab === id && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-300" />}
         </button>)}
       </nav>
-      <div className="mt-auto space-y-1">
-        <button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-emerald-50/60 hover:bg-white/7"><Settings size={18} /> Settings</button>
-        <div className="my-4 border-t border-white/10" />
-        <div className="flex items-center gap-3 rounded-xl px-2 py-3">
-          <div className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-xs font-bold text-forest-900">AD</div>
-          <div className="min-w-0 flex-1"><div className="text-sm font-medium">Admin User</div><div className="text-xs text-white/45">Store administrator</div></div>
-          <LogOut size={16} className="text-white/35" />
-        </div>
+      <div className="mt-auto border-t border-white/10 px-3 pt-5 text-xs leading-5 text-emerald-50/50">
+        Your products and bills are saved in this browser.
       </div>
     </aside>
   </>

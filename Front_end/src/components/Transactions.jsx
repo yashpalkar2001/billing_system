@@ -8,18 +8,17 @@ import {
   CreditCard,
   Wallet,
   Receipt,
-  CalendarDays,
 } from "lucide-react";
 import StatCard from "./StatCard";
 import Modal from "./Modal";
-import { money, shortDate } from "../utils/format";
+import { localDateISO, money, shortDate } from "../utils/format";
 
 const blank = {
-  date: new Date().toISOString().slice(0, 10),
+  date: localDateISO(),
   customer: "Walk-in customer",
   item: "",
   qty: 1,
-  amount: "",
+  amount: 0,
   method: "UPI",
   status: "Completed",
 };
@@ -28,9 +27,8 @@ const field =
 
 export default function Transactions({
   transactions,
-  setTransactions,
   inventory,
-  setInventory,
+  onCreateSale,
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All statuses");
@@ -48,19 +46,20 @@ export default function Transactions({
         );
         const matchStatus = status === "All statuses" || t.status === status;
         const matchMethod = method === "All methods" || t.method === method;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localDateISO();
         const matchRange =
           range === "All dates" ||
           (range === "Today"
             ? t.date === today
             : range === "Last 7 days"
-              ? (new Date(today) - new Date(t.date)) / 86400000 <= 7
+              ? (new Date(today) - new Date(t.date)) / 86400000 >= 0 &&
+                (new Date(today) - new Date(t.date)) / 86400000 < 7
               : t.date.slice(0, 7) === today.slice(0, 7));
         return matchSearch && matchStatus && matchMethod && matchRange;
       }),
     [transactions, search, status, method, range],
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
   const todays = transactions.filter(
     (t) => t.date === today && t.status === "Completed",
   );
@@ -105,17 +104,17 @@ export default function Transactions({
     a.click();
     URL.revokeObjectURL(url);
   };
-  const addTransaction = (e) => {
+  const addTransaction = async (e) => {
     e.preventDefault();
     setError("");
     const item = inventory.find((p) => p.name === form.item);
     if (
       !form.item ||
-      !form.amount ||
-      Number(form.amount) <= 0 ||
+      !item ||
+      !Number.isInteger(Number(form.qty)) ||
       Number(form.qty) < 1
     ) {
-      setError("Select an item and enter a valid quantity and amount.");
+      setError("Select an item and enter a valid whole-number quantity.");
       return;
     }
     if (item && item.stock < Number(form.qty)) {
@@ -124,19 +123,17 @@ export default function Transactions({
     }
     const tx = {
       ...form,
-      id: `TXN-${Date.now().toString().slice(-6)}`,
+      productId: item.id,
       qty: Number(form.qty),
-      amount: Number(form.amount),
+      amount: Number(item.price) * Number(form.qty),
     };
-    setTransactions((prev) => [tx, ...prev]);
-    if (item && tx.status === "Completed")
-      setInventory((prev) =>
-        prev.map((p) =>
-          p.id === item.id ? { ...p, stock: p.stock - Number(form.qty) } : p,
-        ),
-      );
-    setForm(blank);
-    setShowModal(false);
+    try {
+      await onCreateSale(tx);
+      setForm({ ...blank, date: localDateISO() });
+      setShowModal(false);
+    } catch (saleError) {
+      setError(saleError.message);
+    }
   };
   return (
     <div className="space-y-6">
@@ -191,7 +188,8 @@ export default function Transactions({
             </div>
             <button
               onClick={() => {
-                setForm(blank);
+                setForm({ ...blank, date: localDateISO() });
+                setError("");
                 setShowModal(true);
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-800"
@@ -351,7 +349,7 @@ export default function Transactions({
                   setForm({
                     ...form,
                     item: e.target.value,
-                    amount: p ? p.price : form.amount,
+                    amount: p ? Number(p.price) * Number(form.qty || 1) : 0,
                   });
                 }}
                 className={`${field} mt-1.5`}
@@ -371,21 +369,20 @@ export default function Transactions({
                   type="number"
                   min="1"
                   value={form.qty}
-                  onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                  onChange={(e) => {
+                    const qty = e.target.value;
+                    const product = inventory.find((p) => p.name === form.item);
+                    setForm({ ...form, qty, amount: product ? Number(product.price) * Number(qty || 0) : 0 });
+                  }}
                   className={`${field} mt-1.5`}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Total amount (₹)
-                <input
-                  type="number"
-                  min="1"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  placeholder="Enter bill amount"
-                  className={`${field} mt-1.5`}
-                />
-              </label>
+              <div className="text-xs font-semibold text-slate-600">
+                Bill total
+                <div className={`${field} mt-1.5 bg-slate-50 font-bold`} aria-live="polite">
+                  {money(form.amount)}
+                </div>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
