@@ -11,11 +11,14 @@ A simple React + Tailwind CSS billing app for one shop computer. It opens on **T
 - Add a transaction with product, quantity, payment method and status
 - Calculate bill totals from the product price and quantity
 - Automatically deducts sold quantity from inventory only when the transaction is marked Completed
+- Scan product barcodes with a USB scanner or a supported device camera during checkout
+- Use voice input to choose a product and quantity, then review before saving
 - Export the currently filtered transaction list as CSV (opens in Excel)
 
 ### Inventory
 - Product catalogue with category filters and search
 - Add, edit and remove products
+- Assign each product a barcode by typing it or scanning its label
 - Stock value and low-stock summary
 - Reorder-level stock warnings
 
@@ -28,6 +31,7 @@ A simple React + Tailwind CSS billing app for one shop computer. It opens on **T
 - The first run copies the demo records into the local backend database.
 - SQLite is the source of truth; the browser keeps a local display cache.
 - This local project does not include user login or cloud sync.
+- Voice recognition requires browser support and microphone permission; the browser may use its speech service to recognize words.
 
 ## Requirements
 

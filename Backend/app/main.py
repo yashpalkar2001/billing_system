@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from app.core.config import settings
 from app.db.base import Base
@@ -30,6 +31,12 @@ app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 @app.on_event("startup")
 def create_local_tables():
     Base.metadata.create_all(bind=engine)
+    columns = {column["name"] for column in inspect(engine).get_columns("products")}
+    if "barcode" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE products ADD COLUMN barcode VARCHAR(64)"))
+    with engine.begin() as connection:
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_products_barcode_unique ON products (barcode) WHERE barcode IS NOT NULL"))
 
 
 @app.get("/", tags=["Health"])

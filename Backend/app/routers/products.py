@@ -17,13 +17,17 @@ def list_products(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductInput, db: Session = Depends(get_db)):
-    product = Product(**payload.model_dump())
+    values = payload.model_dump()
+    values["barcode"] = values["barcode"].strip() or None if values["barcode"] else None
+    if values["barcode"] and db.scalar(select(Product).where(Product.barcode == values["barcode"])):
+        raise HTTPException(status_code=409, detail="A product with this barcode already exists.")
+    product = Product(**values)
     db.add(product)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="A product with this name already exists.") from exc
+        raise HTTPException(status_code=409, detail="A product with this name or barcode already exists.") from exc
     db.refresh(product)
     return product
 
@@ -33,13 +37,17 @@ def update_product(product_id: int, payload: ProductInput, db: Session = Depends
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found.")
-    for key, value in payload.model_dump().items():
+    values = payload.model_dump()
+    values["barcode"] = values["barcode"].strip() or None if values["barcode"] else None
+    if values["barcode"] and db.scalar(select(Product).where(Product.barcode == values["barcode"], Product.id != product_id)):
+        raise HTTPException(status_code=409, detail="A product with this barcode already exists.")
+    for key, value in values.items():
         setattr(product, key, value)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="A product with this name already exists.") from exc
+        raise HTTPException(status_code=409, detail="A product with this name or barcode already exists.") from exc
     db.refresh(product)
     return product
 

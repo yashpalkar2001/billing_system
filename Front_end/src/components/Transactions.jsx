@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -8,9 +8,11 @@ import {
   CreditCard,
   Wallet,
   Receipt,
+  Mic,
 } from "lucide-react";
 import StatCard from "./StatCard";
 import Modal from "./Modal";
+import BarcodeScanner from "./BarcodeScanner";
 import { localDateISO, money, shortDate } from "../utils/format";
 
 const blank = {
@@ -24,6 +26,7 @@ const blank = {
 };
 const field =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
+const normalizeSpeech = (text) => String(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 
 export default function Transactions({
   transactions,
@@ -37,6 +40,60 @@ export default function Transactions({
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
+  const [voiceMessage, setVoiceMessage] = useState("");
+  const recognitionRef = useRef(null);
+
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+  useEffect(() => {
+    if (!showModal) recognitionRef.current?.stop();
+  }, [showModal]);
+
+  const startVoiceInput = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceMessage("Voice recognition is not supported here. Try Chrome or Edge.");
+      return;
+    }
+    const recognition = new Recognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      const spoken = normalizeSpeech(transcript);
+      const product = [...inventory].sort((a, b) => b.name.length - a.name.length).find((item) => spoken.includes(normalizeSpeech(item.name)));
+      if (!product) {
+        setVoiceMessage(`Heard “${transcript}”, but couldn't match a product. Say its full product name and quantity.`);
+        return;
+      }
+      const quantityWords = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+      const command = spoken.replace(normalizeSpeech(product.name), " ").trim();
+      const quantityToken = command.match(/\b\d+\b|\b(?:a|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+      const quantity = quantityToken ? Number(quantityToken[0]) || quantityWords[quantityToken[0]] || 1 : 1;
+      setForm((current) => ({ ...current, item: product.name, qty: quantity, amount: Number(product.price) * quantity }));
+      setVoiceMessage(`Heard “${transcript}”. Check the item and total before saving.`);
+      setError("");
+    };
+    recognition.onerror = (event) => setVoiceMessage(event.error === "not-allowed" ? "Microphone access was denied. Allow it in your browser to use voice input." : "Voice input could not be heard. Try again or enter the details manually.");
+    recognition.onend = () => { if (recognitionRef.current === recognition) recognitionRef.current = null; };
+    try {
+      recognition.start();
+      setVoiceMessage("Listening… say a quantity followed by the full product name.");
+    } catch {
+      setVoiceMessage("Voice input is already active. Wait a moment and try again.");
+    }
+  };
+
+  const selectBarcode = (code) => {
+    const product = inventory.find((item) => String(item.barcode || "").trim() === code.trim());
+    if (!product) {
+      setError(`No product is assigned to barcode ${code}. Add it in Inventory first.`);
+      return;
+    }
+    setError("");
+    setForm((current) => ({ ...current, item: product.name, amount: Number(product.price) * Number(current.qty || 1) }));
+  };
   const filtered = useMemo(
     () =>
       transactions.filter((t) => {
@@ -190,6 +247,7 @@ export default function Transactions({
               onClick={() => {
                 setForm({ ...blank, date: localDateISO() });
                 setError("");
+                setVoiceMessage("");
                 setShowModal(true);
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-800"
@@ -340,9 +398,11 @@ export default function Transactions({
                 />
               </label>
             </div>
-            <label className="block text-xs font-semibold text-slate-600">
-              Product
+            <div className="block text-xs font-semibold text-slate-600">
+              <label htmlFor="sale-product">Product</label>
+              <div className="my-2"><BarcodeScanner onCode={selectBarcode} /></div>
               <select
+                id="sale-product"
                 value={form.item}
                 onChange={(e) => {
                   const p = inventory.find((x) => x.name === e.target.value);
@@ -361,7 +421,7 @@ export default function Transactions({
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
                 Quantity
@@ -383,6 +443,13 @@ export default function Transactions({
                   {money(form.amount)}
                 </div>
               </div>
+            </div>
+            <div className="space-y-1">
+              <button type="button" onClick={startVoiceInput} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                <Mic size={16} /> Voice input
+              </button>
+              {voiceMessage && <p role="status" className="text-xs text-slate-500">{voiceMessage}</p>}
+              <p className="text-[11px] text-slate-400">Say a quantity and product name, for example “two Red Label Whisky”. Voice recognition is provided by your browser; review the bill before saving.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">

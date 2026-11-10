@@ -13,12 +13,12 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open the interactive API at <http://127.0.0.1:8000/docs>. The database file `wine_billing.db` is created in this folder the first time the API starts. Keep the terminal open while using the API; press `Ctrl+C` to stop it.
+Open the interactive API at <http://127.0.0.1:8000/docs>. The database file `wine_billing.db` is created in this folder the first time the API starts. If an older local database is present, startup adds the barcode column automatically. Keep the terminal open while using the API; press `Ctrl+C` to stop it.
 
 ## Available flow
 
 - `GET /api/products` lists products.
-- `POST /api/products` adds a product; `PUT` and `DELETE /api/products/{id}` edit or remove it.
+- `POST /api/products` adds a product (including an optional unique barcode); `PUT` and `DELETE /api/products/{id}` edit or remove it.
 - `GET /api/inventory` lists stock; `PATCH /api/inventory/{id}` sets a stock quantity.
 - `GET /api/sales` lists bills; `POST /api/sales` records a bill using the current product price.
 - `GET /api/reports/daily` returns today's completed sales.
