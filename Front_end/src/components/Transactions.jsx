@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Plus,
+  Trash2,
   Download,
   SlidersHorizontal,
   ArrowUpRight,
@@ -39,6 +40,7 @@ export default function Transactions({
   const [range, setRange] = useState("All dates");
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(blank);
+  const [cart, setCart] = useState([]);
   const [error, setError] = useState("");
   const [voiceMessage, setVoiceMessage] = useState("");
   const recognitionRef = useRef(null);
@@ -47,6 +49,41 @@ export default function Transactions({
   useEffect(() => {
     if (!showModal) recognitionRef.current?.stop();
   }, [showModal]);
+
+  const addProductToCart = (product, quantity = 1) => {
+    const alreadyAdded = cart.find((line) => line.productId === product.id)?.qty || 0;
+    if (alreadyAdded + quantity > product.stock) {
+      setError(`Only ${Math.max(0, product.stock - alreadyAdded)} more units of ${product.name} are available.`);
+      return false;
+    }
+    setCart((current) => {
+      const existing = current.find((line) => line.productId === product.id);
+      return existing
+        ? current.map((line) => line.productId === product.id ? { ...line, qty: line.qty + quantity } : line)
+        : [...current, { productId: product.id, item: product.name, price: Number(product.price), qty: quantity, stock: product.stock }];
+    });
+    setForm((current) => ({ ...current, item: product.name, qty: 1 }));
+    setError("");
+    return true;
+  };
+
+  const changeCartQuantity = (productId, quantity) => {
+    const product = inventory.find((item) => item.id === productId);
+    if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > product.stock) return;
+    setCart((current) => current.map((line) => line.productId === productId ? { ...line, qty: quantity, stock: product.stock } : line));
+  };
+
+  const cartTotal = cart.reduce((sum, line) => sum + line.price * line.qty, 0);
+
+  const addSelectedProduct = () => {
+    const product = inventory.find((item) => item.name === form.item);
+    const quantity = Number(form.qty);
+    if (!product || !Number.isInteger(quantity) || quantity < 1) {
+      setError("Choose a product and enter a whole-number quantity.");
+      return;
+    }
+    addProductToCart(product, quantity);
+  };
 
   const startVoiceInput = () => {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -71,9 +108,8 @@ export default function Transactions({
       const command = spoken.replace(normalizeSpeech(product.name), " ").trim();
       const quantityToken = command.match(/\b\d+\b|\b(?:a|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
       const quantity = quantityToken ? Number(quantityToken[0]) || quantityWords[quantityToken[0]] || 1 : 1;
-      setForm((current) => ({ ...current, item: product.name, qty: quantity, amount: Number(product.price) * quantity }));
-      setVoiceMessage(`Heard “${transcript}”. Check the item and total before saving.`);
-      setError("");
+      const added = addProductToCart(product, quantity);
+      setVoiceMessage(added ? `Added ${quantity} × ${product.name}. You can scan or say another item.` : `Heard “${transcript}”, but the requested quantity is not available.`);
     };
     recognition.onerror = (event) => setVoiceMessage(event.error === "not-allowed" ? "Microphone access was denied. Allow it in your browser to use voice input." : "Voice input could not be heard. Try again or enter the details manually.");
     recognition.onend = () => { if (recognitionRef.current === recognition) recognitionRef.current = null; };
@@ -91,8 +127,7 @@ export default function Transactions({
       setError(`No product is assigned to barcode ${code}. Add it in Inventory first.`);
       return;
     }
-    setError("");
-    setForm((current) => ({ ...current, item: product.name, amount: Number(product.price) * Number(current.qty || 1) }));
+    addProductToCart(product, 1);
   };
   const filtered = useMemo(
     () =>
@@ -164,28 +199,13 @@ export default function Transactions({
   const addTransaction = async (e) => {
     e.preventDefault();
     setError("");
-    const item = inventory.find((p) => p.name === form.item);
-    if (
-      !form.item ||
-      !item ||
-      !Number.isInteger(Number(form.qty)) ||
-      Number(form.qty) < 1
-    ) {
-      setError("Select an item and enter a valid whole-number quantity.");
+    if (!cart.length) {
+      setError("Add at least one product to the bill.");
       return;
     }
-    if (item && item.stock < Number(form.qty)) {
-      setError(`Only ${item.stock} units are available in inventory.`);
-      return;
-    }
-    const tx = {
-      ...form,
-      productId: item.id,
-      qty: Number(form.qty),
-      amount: Number(item.price) * Number(form.qty),
-    };
     try {
-      await onCreateSale(tx);
+      await onCreateSale({ ...form, items: cart.map(({ productId, qty }) => ({ product_id: productId, qty })) });
+      setCart([]);
       setForm({ ...blank, date: localDateISO() });
       setShowModal(false);
     } catch (saleError) {
@@ -246,6 +266,7 @@ export default function Transactions({
             <button
               onClick={() => {
                 setForm({ ...blank, date: localDateISO() });
+                setCart([]);
                 setError("");
                 setVoiceMessage("");
                 setShowModal(true);
@@ -400,7 +421,8 @@ export default function Transactions({
             </div>
             <div className="block text-xs font-semibold text-slate-600">
               <label htmlFor="sale-product">Product</label>
-              <div className="my-2"><BarcodeScanner onCode={selectBarcode} /></div>
+              <div className="my-2"><BarcodeScanner placeholder="Scan barcode to add item" onCode={selectBarcode} /></div>
+              <p className="mb-2 text-[11px] font-normal text-slate-400">Each scan adds one unit. Scan another item to keep building this bill.</p>
               <select
                 id="sale-product"
                 value={form.item}
@@ -437,13 +459,39 @@ export default function Transactions({
                   className={`${field} mt-1.5`}
                 />
               </label>
-              <div className="text-xs font-semibold text-slate-600">
-                Bill total
-                <div className={`${field} mt-1.5 bg-slate-50 font-bold`} aria-live="polite">
-                  {money(form.amount)}
-                </div>
+              <div className="flex items-end">
+                <button type="button" onClick={addSelectedProduct} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+                  <Plus size={16} /> Add item
+                </button>
               </div>
             </div>
+            <section className="rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <h3 className="text-sm font-semibold text-slate-700">Bill items</h3>
+                <span className="text-xs text-slate-400">{cart.reduce((sum, line) => sum + line.qty, 0)} units</span>
+              </div>
+              {cart.length === 0 ? (
+                <p className="px-4 py-5 text-center text-sm text-slate-400">Scan a barcode or add a product to begin.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {cart.map((line) => (
+                    <div key={line.productId} className="flex items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-700">{line.item}</p>
+                        <p className="text-xs text-slate-400">{money(line.price)} each</p>
+                      </div>
+                      <input aria-label={`Quantity for ${line.item}`} type="number" min="1" max={line.stock} value={line.qty} onChange={(event) => changeCartQuantity(line.productId, Number(event.target.value))} className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm" />
+                      <span className="w-24 text-right text-sm font-semibold text-slate-700">{money(line.price * line.qty)}</span>
+                      <button type="button" onClick={() => setCart((current) => current.filter((item) => item.productId !== line.productId))} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label={`Remove ${line.item}`}><Trash2 size={15} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-3">
+                <span className="text-sm font-semibold text-slate-600">Bill total</span>
+                <span className="text-lg font-bold text-slate-800" aria-live="polite">{money(cartTotal)}</span>
+              </div>
+            </section>
             <div className="space-y-1">
               <button type="button" onClick={startVoiceInput} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                 <Mic size={16} /> Voice input

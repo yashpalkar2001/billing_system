@@ -96,10 +96,13 @@ export default function App() {
   const createSale = async (sale) => {
     const saved = await apiRequest("/api/sales/", {
       method: "POST",
-      body: JSON.stringify({ product_id: sale.productId, date: sale.date, customer: sale.customer, qty: sale.qty, method: sale.method, status: sale.status }),
+      body: JSON.stringify({ items: sale.items, date: sale.date, customer: sale.customer, method: sale.method, status: sale.status }),
     });
     setTransactions((current) => [saved, ...current]);
-    if (saved.status === "Completed") setInventory((current) => current.map((product) => product.id === saved.product_id ? { ...product, stock: product.stock - saved.qty } : product));
+    if (saved.status === "Completed") {
+      const sold = new Map((saved.items || []).map((line) => [line.product_id, line.qty]));
+      setInventory((current) => current.map((product) => sold.has(product.id) ? { ...product, stock: product.stock - sold.get(product.id) } : product));
+    }
     return saved;
   };
   return (

@@ -1,4 +1,5 @@
 from uuid import uuid4
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import Product, Sale
-from app.schemas.sale import SaleCreate, SaleOut
+from app.schemas.sale import SaleCreate, SaleLineCreate, SaleOut
 
 router = APIRouter()
 
@@ -18,27 +19,60 @@ def list_sales(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=SaleOut, status_code=status.HTTP_201_CREATED)
 def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
-    product = db.scalar(select(Product).where(Product.id == payload.product_id))
-    if product is None:
-        raise HTTPException(status_code=404, detail="Product not found.")
-    if payload.status == "Completed" and product.stock < payload.qty:
-        raise HTTPException(status_code=409, detail=f"Only {product.stock} units are available.")
+    requested = payload.items or (
+        [SaleLineCreate(product_id=payload.product_id, qty=payload.qty)]
+        if payload.product_id and payload.qty
+        else []
+    )
+    if not requested:
+        raise HTTPException(status_code=422, detail="Add at least one product to the bill.")
 
-    unit_price = product.price
+    quantities = {}
+    for line in requested:
+        quantities[line.product_id] = quantities.get(line.product_id, 0) + line.qty
+    products = {
+        product.id: product
+        for product in db.scalars(select(Product).where(Product.id.in_(quantities))).all()
+    }
+    missing = set(quantities) - set(products)
+    if missing:
+        raise HTTPException(status_code=404, detail="One or more products were not found.")
+    for product_id, qty in quantities.items():
+        product = products[product_id]
+        if payload.status == "Completed" and product.stock < qty:
+            raise HTTPException(status_code=409, detail=f"Only {product.stock} units of {product.name} are available.")
+
+    lines = []
+    total = Decimal("0.00")
+    for product_id, qty in quantities.items():
+        product = products[product_id]
+        unit_price = Decimal(str(product.price))
+        line_total = unit_price * qty
+        total += line_total
+        lines.append({
+            "product_id": product.id,
+            "item": product.name,
+            "qty": qty,
+            "unit_price": float(unit_price),
+            "amount": float(line_total),
+        })
+
     sale = Sale(
         transaction_id=f"TXN-{uuid4().hex[:12].upper()}",
         date=payload.date,
         customer=payload.customer.strip() or "Walk-in customer",
-        product_id=product.id,
-        item=product.name,
-        qty=payload.qty,
-        unit_price=unit_price,
-        amount=unit_price * payload.qty,
+        product_id=lines[0]["product_id"] if len(lines) == 1 else None,
+        items=lines,
+        item=", ".join(f"{line['item']} × {line['qty']}" for line in lines),
+        qty=sum(line["qty"] for line in lines),
+        unit_price=lines[0]["unit_price"] if len(lines) == 1 else 0,
+        amount=total,
         method=payload.method,
         status=payload.status,
     )
     if payload.status == "Completed":
-        product.stock -= payload.qty
+        for product_id, qty in quantities.items():
+            products[product_id].stock -= qty
     db.add(sale)
     db.commit()
     db.refresh(sale)
