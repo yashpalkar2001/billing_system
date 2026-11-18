@@ -11,6 +11,7 @@ export default function BarcodeScanner({ onCode, placeholder = "Scan or enter ba
   const streamRef = useRef(null);
   const detectorRef = useRef(null);
   const callbackRef = useRef(onCode);
+  const lastCameraCodeRef = useRef({ code: "", time: 0, armed: true });
 
   useEffect(() => { callbackRef.current = onCode; }, [onCode]);
   const stopStream = () => {
@@ -37,11 +38,15 @@ export default function BarcodeScanner({ onCode, placeholder = "Scan or enter ba
           const matches = await detectorRef.current.detect(video);
           const code = matches.find((match) => match.rawValue)?.rawValue;
           if (code) {
-            callbackRef.current(code);
-            active = false;
-            stopStream();
-            setCameraOpen(false);
-            return;
+            const now = Date.now();
+            const last = lastCameraCodeRef.current;
+            if (last.code !== code || last.armed) {
+              lastCameraCodeRef.current = { code, time: now, armed: false };
+              callbackRef.current(code);
+              setError("");
+            }
+          } else if (lastCameraCodeRef.current.code && Date.now() - lastCameraCodeRef.current.time > 700) {
+            lastCameraCodeRef.current = { code: "", time: 0, armed: true };
           }
         } catch {
           setError("Could not read that barcode. Try moving the camera closer.");

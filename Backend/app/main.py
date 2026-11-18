@@ -35,6 +35,10 @@ def create_local_tables():
     if "barcode" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE products ADD COLUMN barcode VARCHAR(64)"))
+    sale_columns = {column["name"] for column in inspect(engine).get_columns("sales")}
+    if "items" not in sale_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE sales ADD COLUMN items JSON"))
     with engine.begin() as connection:
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_products_barcode_unique ON products (barcode) WHERE barcode IS NOT NULL"))
 
