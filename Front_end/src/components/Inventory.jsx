@@ -66,7 +66,7 @@ export default function Inventory({ inventory, onSaveProduct, onDeleteProduct })
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Available stock<input type="number" min="0" value={form.stock} onChange={e=>setForm({...form,stock:e.target.value})} className={`${field} mt-1.5`}/></label><label className="text-xs font-semibold text-slate-600">Selling price (₹)<input type="number" min="1" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} className={`${field} mt-1.5`}/></label></div>
         <label className="block text-xs font-semibold text-slate-600">Reorder alert level<input type="number" min="0" value={form.reorder} onChange={e=>setForm({...form,reorder:e.target.value})} className={`${field} mt-1.5`}/></label>
         {error&&<p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={()=>setModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button className="rounded-xl bg-forest-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-forest-800">{editing?'Save changes':'Add product'}</button></div>
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-100 bg-white py-3"><button type="button" onClick={()=>setModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button className="rounded-xl bg-forest-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-forest-800">{editing?'Save changes':'Add product'}</button></div>
       </form>
     </Modal>}
   </div>

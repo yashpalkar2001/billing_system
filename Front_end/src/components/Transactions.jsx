@@ -529,7 +529,7 @@ export default function Transactions({
                 {error}
               </p>
             )}
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-100 bg-white py-3">
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
