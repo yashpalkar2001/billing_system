@@ -62,7 +62,12 @@ export default function Transactions({
         ? current.map((line) => line.productId === product.id ? { ...line, qty: line.qty + quantity } : line)
         : [...current, { productId: product.id, item: product.name, price: Number(product.price), qty: quantity, stock: product.stock }];
     });
-    setForm((current) => ({ ...current, item: product.name, qty: 1 }));
+    setForm((current) => ({
+      ...current,
+      item: product.name,
+      qty: 1,
+      amount: Number(product.price),
+    }));
     setError("");
     return true;
   };
@@ -74,6 +79,7 @@ export default function Transactions({
   };
 
   const cartTotal = cart.reduce((sum, line) => sum + line.price * line.qty, 0);
+  const selectedProduct = inventory.find((product) => product.name === form.item);
 
   const addSelectedProduct = () => {
     const product = inventory.find((item) => item.name === form.item);
@@ -431,7 +437,8 @@ export default function Transactions({
                   setForm({
                     ...form,
                     item: e.target.value,
-                    amount: p ? Number(p.price) * Number(form.qty || 1) : 0,
+                    qty: 1,
+                    amount: p ? Number(p.price) : 0,
                   });
                 }}
                 className={`${field} mt-1.5`}
@@ -465,6 +472,11 @@ export default function Transactions({
                 </button>
               </div>
             </div>
+            {selectedProduct && (
+              <p className="-mt-2 text-xs text-slate-500" aria-live="polite">
+                Unit price: {money(selectedProduct.price)} · Line total: {money(Number(selectedProduct.price) * Number(form.qty || 0))}
+              </p>
+            )}
             <section className="rounded-xl border border-slate-200">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                 <h3 className="text-sm font-semibold text-slate-700">Bill items</h3>
