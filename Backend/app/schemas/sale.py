@@ -27,6 +27,13 @@ class SaleCreate(BaseModel):
     status: str = Field(default="Completed", pattern="^(Completed|Failed)$")
 
 
+class SaleUpdate(BaseModel):
+    date: date
+    customer: str = Field(default="Walk-in customer", max_length=160)
+    method: str = Field(default="Cash", max_length=40)
+    status: str = Field(default="Completed", pattern="^(Completed|Failed)$")
+
+
 class SaleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str = Field(validation_alias="transaction_id")

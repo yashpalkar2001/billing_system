@@ -105,6 +105,22 @@ export default function App() {
     }
     return saved;
   };
+  const updateSale = async (id, sale) => {
+    const saved = await apiRequest(`/api/sales/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(sale),
+    });
+    setTransactions((current) => current.map((transaction) => transaction.id === id ? saved : transaction));
+    const products = await apiRequest("/api/products/");
+    setInventory(products);
+    return saved;
+  };
+  const deleteSale = async (id) => {
+    await apiRequest(`/api/sales/${encodeURIComponent(id)}`, { method: "DELETE" });
+    setTransactions((current) => current.filter((transaction) => transaction.id !== id));
+    const products = await apiRequest("/api/products/");
+    setInventory(products);
+  };
   return (
     <div className="min-h-screen bg-cream lg:flex">
       <Sidebar
@@ -132,6 +148,8 @@ export default function App() {
               transactions={transactions}
               inventory={inventory}
               onCreateSale={createSale}
+              onUpdateSale={updateSale}
+              onDeleteSale={deleteSale}
             />
           ) : activeTab === "inventory" ? (
             <Inventory inventory={inventory} onSaveProduct={saveProduct} onDeleteProduct={deleteProduct} />

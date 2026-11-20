@@ -10,6 +10,8 @@ import {
   Wallet,
   Receipt,
   Mic,
+  MoreVertical,
+  Pencil,
 } from "lucide-react";
 import StatCard from "./StatCard";
 import Modal from "./Modal";
@@ -33,12 +35,17 @@ export default function Transactions({
   transactions,
   inventory,
   onCreateSale,
+  onUpdateSale,
+  onDeleteSale,
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All statuses");
   const [method, setMethod] = useState("All methods");
   const [range, setRange] = useState("All dates");
   const [showModal, setShowModal] = useState(false);
+  const [editingSale, setEditingSale] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null);
+  const [actionError, setActionError] = useState("");
   const [form, setForm] = useState(blank);
   const [cart, setCart] = useState([]);
   const [error, setError] = useState("");
@@ -205,13 +212,18 @@ export default function Transactions({
   const addTransaction = async (e) => {
     e.preventDefault();
     setError("");
-    if (!cart.length) {
+    if (!editingSale && !cart.length) {
       setError("Add at least one product to the bill.");
       return;
     }
     try {
-      await onCreateSale({ ...form, items: cart.map(({ productId, qty }) => ({ product_id: productId, qty })) });
+      if (editingSale) {
+        await onUpdateSale(editingSale.id, form);
+      } else {
+        await onCreateSale({ ...form, items: cart.map(({ productId, qty }) => ({ product_id: productId, qty })) });
+      }
       setCart([]);
+      setEditingSale(null);
       setForm({ ...blank, date: localDateISO() });
       setShowModal(false);
     } catch (saleError) {
@@ -271,6 +283,7 @@ export default function Transactions({
             </div>
             <button
               onClick={() => {
+                setEditingSale(null);
                 setForm({ ...blank, date: localDateISO() });
                 setCart([]);
                 setError("");
@@ -326,6 +339,7 @@ export default function Transactions({
             </button>
           </div>
         </div>
+        {actionError && <p role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{actionError}</p>}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-left">
             <thead className="bg-white text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -338,6 +352,7 @@ export default function Transactions({
                   "Qty",
                   "Amount",
                   "Status",
+                  "",
                 ].map((h) => (
                   <th key={h} className="px-5 py-4">
                     {h}
@@ -379,12 +394,34 @@ export default function Transactions({
                       {t.status}
                     </span>
                   </td>
+                  <td className="relative px-3 py-3 text-right">
+                    <button type="button" aria-label={`Actions for transaction ${t.id}`} aria-expanded={openMenu === t.id} onClick={() => setOpenMenu(openMenu === t.id ? null : t.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                      <MoreVertical size={18} />
+                    </button>
+                    {openMenu === t.id && <div className="absolute right-3 top-12 z-20 w-36 rounded-xl border border-slate-200 bg-white p-1 text-left shadow-lg">
+                      <button type="button" onClick={() => {
+                        setEditingSale(t);
+                        setForm({ date: t.date, customer: t.customer, method: t.method, status: t.status });
+                        setCart([]);
+                        setError("");
+                        setActionError("");
+                        setOpenMenu(null);
+                        setShowModal(true);
+                      }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><Pencil size={14} /> Edit</button>
+                      <button type="button" onClick={async () => {
+                        setOpenMenu(null);
+                        setActionError("");
+                        if (!window.confirm(`Delete transaction ${t.id}?${t.status === "Completed" ? " Its stock will be returned to inventory." : ""}`)) return;
+                        try { await onDeleteSale(t.id); } catch (deleteError) { setActionError(deleteError.message); }
+                      }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"><Trash2 size={14} /> Delete</button>
+                    </div>}
+                  </td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="8"
                     className="px-5 py-14 text-center text-sm text-slate-400"
                   >
                     No transactions match these filters.
@@ -402,7 +439,7 @@ export default function Transactions({
         </div>
       </section>
       {showModal && (
-        <Modal title="Add new transaction" onClose={() => setShowModal(false)}>
+        <Modal title={editingSale ? `Edit transaction ${editingSale.id}` : "Add new transaction"} onClose={() => { setShowModal(false); setEditingSale(null); }}>
           <form onSubmit={addTransaction} className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
@@ -425,7 +462,8 @@ export default function Transactions({
                 />
               </label>
             </div>
-            <div className="block text-xs font-semibold text-slate-600">
+            {editingSale && <p className="text-xs text-slate-500">Editing transaction details. Products and quantities stay as recorded.</p>}
+            {!editingSale && <div className="block text-xs font-semibold text-slate-600">
               <label htmlFor="sale-product">Product</label>
               <div className="my-2"><BarcodeScanner placeholder="Scan barcode to add item" onCode={selectBarcode} /></div>
               <p className="mb-2 text-[11px] font-normal text-slate-400">Each scan adds one unit. Scan another item to keep building this bill.</p>
@@ -450,8 +488,8 @@ export default function Transactions({
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            </div>}
+            {!editingSale && <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
                 Quantity
                 <input
@@ -471,13 +509,13 @@ export default function Transactions({
                   <Plus size={16} /> Add item
                 </button>
               </div>
-            </div>
-            {selectedProduct && (
+            </div>}
+            {!editingSale && selectedProduct && (
               <p className="-mt-2 text-xs text-slate-500" aria-live="polite">
                 Unit price: {money(selectedProduct.price)} · Line total: {money(Number(selectedProduct.price) * Number(form.qty || 0))}
               </p>
             )}
-            <section className="rounded-xl border border-slate-200">
+            {!editingSale && <section className="rounded-xl border border-slate-200">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                 <h3 className="text-sm font-semibold text-slate-700">Bill items</h3>
                 <span className="text-xs text-slate-400">{cart.reduce((sum, line) => sum + line.qty, 0)} units</span>
@@ -503,14 +541,14 @@ export default function Transactions({
                 <span className="text-sm font-semibold text-slate-600">Bill total</span>
                 <span className="text-lg font-bold text-slate-800" aria-live="polite">{money(cartTotal)}</span>
               </div>
-            </section>
-            <div className="space-y-1">
+            </section>}
+            {!editingSale && <div className="space-y-1">
               <button type="button" onClick={startVoiceInput} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                 <Mic size={16} /> Voice input
               </button>
               {voiceMessage && <p role="status" className="text-xs text-slate-500">{voiceMessage}</p>}
               <p className="text-[11px] text-slate-400">Say a quantity and product name, for example “two Red Label Whisky”. Voice recognition is provided by your browser; review the bill before saving.</p>
-            </div>
+            </div>}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
                 Payment method
@@ -544,13 +582,13 @@ export default function Transactions({
             <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-100 bg-white py-3">
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={() => { setShowModal(false); setEditingSale(null); }}
                 className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600"
               >
                 Cancel
               </button>
               <button className="rounded-xl bg-forest-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-forest-800">
-                Save transaction
+                {editingSale ? "Save changes" : "Save transaction"}
               </button>
             </div>
           </form>

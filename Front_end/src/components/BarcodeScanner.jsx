@@ -11,9 +11,11 @@ export default function BarcodeScanner({ onCode, placeholder = "Scan or enter ba
   const streamRef = useRef(null);
   const detectorRef = useRef(null);
   const callbackRef = useRef(onCode);
+  const inputTimerRef = useRef(null);
   const lastCameraCodeRef = useRef({ code: "", time: 0, armed: true });
 
   useEffect(() => { callbackRef.current = onCode; }, [onCode]);
+  useEffect(() => () => window.clearTimeout(inputTimerRef.current), []);
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -65,6 +67,7 @@ export default function BarcodeScanner({ onCode, placeholder = "Scan or enter ba
   }, [cameraOpen]);
 
   const submitCode = () => {
+    window.clearTimeout(inputTimerRef.current);
     const code = value.trim();
     if (!code) return;
     callbackRef.current(code);
@@ -113,7 +116,18 @@ export default function BarcodeScanner({ onCode, placeholder = "Scan or enter ba
       <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
           <ScanBarcode size={17} className="absolute left-3 top-3 text-slate-400" />
-          <input value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); submitCode(); } }} placeholder={placeholder} className={`${field} pl-9`} aria-label="Barcode input" />
+          <input value={value} onChange={(event) => {
+            const nextValue = event.target.value;
+            setValue(nextValue);
+            window.clearTimeout(inputTimerRef.current);
+            if (nextValue.trim()) {
+              inputTimerRef.current = window.setTimeout(() => {
+                callbackRef.current(nextValue.trim());
+                setValue("");
+                setError("");
+              }, 250);
+            }
+          }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); submitCode(); } }} placeholder={placeholder} className={`${field} pl-9`} aria-label="Barcode input" />
         </div>
         <button type="button" onClick={cameraOpen ? closeCamera : startCamera} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" aria-label={cameraOpen ? "Stop camera scanner" : "Start camera scanner"}>
           {cameraOpen ? <CameraOff size={16} /> : <Camera size={16} />}
